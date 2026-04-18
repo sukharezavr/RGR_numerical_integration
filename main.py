@@ -482,6 +482,6 @@ methods = [
 ]
 
 analysis()
-#plot_error()
+plot_error()
 plot_error_simple()
 analysis_new()
