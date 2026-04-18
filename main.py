@@ -1,5 +1,7 @@
 import math
 import matplotlib.pyplot as plt
+import numpy as np
+from numpy.polynomial import legendre
 
 # ПРОСТЕЙШИЕ ФУНКЦИИ
 
@@ -41,6 +43,82 @@ def three_eighths(f, n, a, b):
         result += (3 * h / 8) * (f(x0) + 3 * f(x1) + 3 * f(x2) + f(x3))
     return result
 
+# КВАДРАТУРНЫЕ ФОРМУЛЫ ГАУССОВСКОГО ТИПА
+
+def gauss_quadrature_auto(f, n_nodes, a, b):
+    """Гаусс для любого n_nodes (автоматические узлы и веса)"""
+    nodes, weights = legendre.leggauss(n_nodes)
+    mid = (a + b) / 2
+    half_len = (b - a) / 2
+    result = 0
+    for ti, Ai in zip(nodes, weights):
+        x = mid + half_len * ti
+        result += Ai * f(x)
+    return half_len * result
+
+
+def chebyshev_quadrature(f, n_nodes, a, b):
+    """Чебышев, n_nodes = 2,3,4,5 (все веса = 2/n)"""
+    tables = {
+        2: [-0.577350, 0.577350],
+        3: [-0.707107, 0.0, 0.707107],
+        4: [-0.794654, -0.187592, 0.187592, 0.794654],
+        5: [-0.832497, -0.374541, 0.0, 0.374541, 0.832497],
+    }
+    if n_nodes not in tables:
+        raise ValueError(f"Чебышев: n_nodes={n_nodes} не поддерживается")
+    t = tables[n_nodes]
+    A = [2.0 / n_nodes] * n_nodes
+    mid = (a + b) / 2
+    half_len = (b - a) / 2
+    result = 0
+    for ti, Ai in zip(t, A):
+        x = mid + half_len * ti
+        result += Ai * f(x)
+    return half_len * result
+
+
+def radau_quadrature(f, n_nodes, a, b):
+    """Радо, n_nodes = 2,3,4,5 (фиксирован t = -1)"""
+    # ВНИМАНИЕ: n_nodes здесь — общее число узлов (включая фиксированный)
+    tables = {
+        2: ([-1.0, 0.333333], [0.5, 1.5]),
+        3: ([-1.0, -0.289898, 0.689898], [0.222222, 1.024972, 0.752806]),
+        4: ([-1.0, -0.575319, 0.181066, 0.822824], [0.125, 0.657689, 0.776387, 0.440924]),
+        5: ([-1.0, -0.802929, -0.390928, 0.124050, 0.603973, 0.920380],
+            [0.055556, 0.319640, 0.485387, 0.520927, 0.416901, 0.201588]),
+    }
+    if n_nodes not in tables:
+        raise ValueError(f"Радо: n_nodes={n_nodes} не поддерживается")
+    t, A = tables[n_nodes]
+    mid = (a + b) / 2
+    half_len = (b - a) / 2
+    result = 0
+    for ti, Ai in zip(t, A):
+        x = mid + half_len * ti
+        result += Ai * f(x)
+    return half_len * result
+
+
+def lobatto_quadrature(f, n_nodes, a, b):
+    """Лобатто, n_nodes = 2,3,4,5 (фиксированы t = -1 и t = 1)"""
+    tables = {
+        2: ([-1.0, 1.0], [1.0, 1.0]),
+        3: ([-1.0, 0.0, 1.0], [1/3, 4/3, 1/3]),
+        4: ([-1.0, -0.447214, 0.447214, 1.0], [1/6, 5/6, 5/6, 1/6]),
+        5: ([-1.0, -0.654654, 0.0, 0.654654, 1.0],
+            [0.1, 0.544444, 0.711111, 0.544444, 0.1]),
+    }
+    if n_nodes not in tables:
+        raise ValueError(f"Лобатто: n_nodes={n_nodes} не поддерживается")
+    t, A = tables[n_nodes]
+    mid = (a + b) / 2
+    half_len = (b - a) / 2
+    result = 0
+    for ti, Ai in zip(t, A):
+        x = mid + half_len * ti
+        result += Ai * f(x)
+    return half_len * result
 
 #ОШИБКА РУНГЕ
 
@@ -213,51 +291,296 @@ def analysis():
                 print(f"{name:<20} {n:5d} {'---':>10} {'---':>15} {'---':>15}")
 
 
-def plot_error():
-    n_values = [4, 8, 16, 32, 64, 128, 256, 512]
+def analysis_new():
+    print("\n" + "=" * 70)
+    print("ЧИСЛЕННЫЙ АНАЛИЗ ДЛЯ МЕТОДОВ ГАУССОВСКОГО ТИПА")
+    print("=" * 70)
+
+    new_methods = [
+        (gauss_quadrature_auto, "Гаусс (авто)"),
+        (chebyshev_quadrature, "Чебышев"),
+        (radau_quadrature, "Радо"),
+        (lobatto_quadrature, "Лобатто"),
+    ]
+
+    k_values = [2, 3, 4, 5, 10, 15, 20]  # для Гаусса (авто)
+    k_table = [2, 3, 4, 5]  # для табличных методов
 
     for task_name, task in test_tasks.items():
+        print(f"\n{'=' * 70}")
+        print(f"Функция: {task_name} — {task['note']}")
+        print(f"Отрезок [{task['a']}, {task['b']}]")
+        print(f"Точное значение: {task['exact']:.8f}")
+        print("=" * 70)
+
+        # Шапка таблицы
+        print(f"{'Метод':<20} {'k':>5} {'Приближение':>15} {'Ошибка':>15}")
+        print("-" * 60)
+
+        for method, name in new_methods:
+            # Определяем, какие k использовать для этого метода
+            if name == "Гаусс (авто)":
+                ks = k_values
+            else:
+                ks = k_table
+
+            for k in ks:
+                try:
+                    I = method(task['f'], k, task['a'], task['b'])
+                    error = abs(task['exact'] - I)
+                    print(f"{name:<20} {k:5d} {I:15.8f} {error:15.2e}")
+                except Exception as e:
+                    print(f"{name:<20} {k:5d} {'---':>15} {'ошибка':>15}")
+            print("-" * 60)
+
+def plot_error():
+    n_values_newton = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+    n_values_x2 = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+    n_nodes_gauss_auto = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20]
+    n_nodes_table = [2, 3, 4, 5]
+
+    # ===== МЕТОДЫ =====
+    methods_newton = [
+        (rectangles, 2, "Прямоугольники"),
+        (trapezoid, 2, "Трапеции"),
+        (simpson, 4, "Симпсон"),
+        (three_eighths, 4, "Три восьмых"),
+    ]
+
+    table_methods = [
+        (chebyshev_quadrature, "Чебышев"),
+        (radau_quadrature, "Радо"),
+        (lobatto_quadrature, "Лобатто"),
+    ]
+
+    # ===== ОСНОВНОЙ ЦИКЛ ПО ФУНКЦИЯМ =====
+    for task_name, task in test_tasks.items():
+        # Пропускаем x² (график неинформативный)
+        if task_name == 'x²':
+            continue
+
+        # Выбираем диапазон для Ньютона–Котеса
+        if task_name == 'x²':
+            n_values_newton_task = n_values_x2
+        else:
+            n_values_newton_task = n_values_newton
+
+        # ========== ГРАФИК 1: Оценка Рунге (старые) + реальная ошибка (новые) ==========
         plt.figure(figsize=(12, 8))
 
-        for method, p, method_name in methods:
+        # Старые методы — оценка Рунге
+        for method, p, name in methods_newton:
             errors = []
-            valid_n = []
-
-            for n in n_values:
+            xs = []
+            prev_I = None
+            prev_n = None
+            for n in n_values_newton_task:
                 try:
-                    # Корректировка n
                     if method == simpson and n % 2 != 0:
-                        n_used = n + 1
-                    elif method == three_eighths and n % 3 != 0:
-                        n_used = ((n + 2) // 3) * 3
-                    else:
-                        n_used = n
+                        continue
+                    if method == three_eighths and n % 3 != 0:
+                        continue
+                    I = method(task['f'], n, task['a'], task['b'])
+                    if prev_I is not None:
+                        error = abs(I - prev_I) / (2 ** p - 1)
+                        if error > 1e-16:
+                            errors.append(error)
+                            xs.append(n)
+                    prev_I = I
+                except:
+                    continue
+            if errors:
+                plt.semilogy(xs, errors, 'o-', label=name + " (Рунге)", linewidth=1.5, markersize=4)
 
-                    I = method(task['f'], n_used, task['a'], task['b'])
+        # Гаусс (авто) — реальная ошибка
+        errors_gauss = []
+        xs_gauss = []
+        for k in n_nodes_gauss_auto:
+            try:
+                I = gauss_quadrature_auto(task['f'], k, task['a'], task['b'])
+                error = abs(task['exact'] - I)
+                if error > 1e-16:
+                    errors_gauss.append(error)
+                    xs_gauss.append(k - 1)  # костыль для сравнения по вычислениям
+            except:
+                continue
+        if errors_gauss:
+            plt.semilogy(xs_gauss, errors_gauss, 's-', label="Гаусс (реальная)", linewidth=2, markersize=6)
+
+        # Табличные методы — реальная ошибка
+        markers = ['d-', '^-', 'v-']
+        for (method, name), marker in zip(table_methods, markers):
+            errors = []
+            xs = []
+            for k in n_nodes_table:
+                try:
+                    I = method(task['f'], k, task['a'], task['b'])
                     error = abs(task['exact'] - I)
-
                     if error > 1e-16:
                         errors.append(error)
-                        valid_n.append(n_used)
-
-                except Exception as e:
-                    print(f"Ошибка для {method_name} при n={n}: {e}")
+                        xs.append(k - 1)
+                except:
                     continue
-
             if errors:
-                plt.semilogy(valid_n, errors, 'o-', label=method_name,
-                             linewidth=2, markersize=4)
+                plt.semilogy(xs, errors, marker, label=name + " (реальная)", linewidth=2, markersize=6)
 
-        plt.xlabel('число разбиений n')
-        plt.ylabel('фактическая погрешность (лог. шкала)')
-        plt.title(task_name)
+        plt.xlabel('n (отрезки) / (n+1 вычислений)')
+        plt.ylabel('погрешность (лог. шкала)')
+        plt.title(f'{task_name} — Рунге (старые) vs реальная (новые)')
         plt.legend()
         plt.grid(True, alpha=0.3, which='both')
         plt.tight_layout()
-        plt.savefig(f'error_plot_{task_name}.png', dpi=150, bbox_inches='tight')
+        plt.savefig(f'error_plot_runge_vs_real_{task_name}.png', dpi=150, bbox_inches='tight')
+        plt.show()
+
+        # ========== ГРАФИК 2: Только реальная ошибка для всех методов ==========
+        plt.figure(figsize=(12, 8))
+
+        # Старые методы — реальная ошибка
+        for method, p, name in methods_newton:
+            errors = []
+            xs = []
+            for n in n_values_newton_task:
+                try:
+                    if method == simpson and n % 2 != 0:
+                        continue
+                    if method == three_eighths and n % 3 != 0:
+                        continue
+                    I = method(task['f'], n, task['a'], task['b'])
+                    error = abs(task['exact'] - I)
+                    if error > 1e-16:
+                        errors.append(error)
+                        xs.append(n)
+                except:
+                    continue
+            if errors:
+                plt.semilogy(xs, errors, 'o-', label=name, linewidth=1.5, markersize=4)
+
+        # Гаусс (авто)
+        if errors_gauss:
+            plt.semilogy(xs_gauss, errors_gauss, 's-', label="Гаусс", linewidth=2, markersize=6)
+
+        # Табличные методы
+        for (method, name), marker in zip(table_methods, markers):
+            errors = []
+            xs = []
+            for k in n_nodes_table:
+                try:
+                    I = method(task['f'], k, task['a'], task['b'])
+                    error = abs(task['exact'] - I)
+                    if error > 1e-16:
+                        errors.append(error)
+                        xs.append(k - 1)
+                except:
+                    continue
+            if errors:
+                plt.semilogy(xs, errors, marker, label=name, linewidth=2, markersize=6)
+
+        plt.xlabel('n (отрезки для Ньютона–Котеса) / (n+1 вычислений)')
+        plt.ylabel('реальная ошибка (лог. шкала)')
+        plt.title(f'{task_name} — реальная ошибка для всех методов')
+        plt.legend()
+        plt.grid(True, alpha=0.3, which='both')
+        plt.tight_layout()
+        plt.savefig(f'error_plot_real_all_{task_name}.png', dpi=150, bbox_inches='tight')
         plt.show()
 
 
+def plot_error_simple():
+    # Диапазоны
+    n_newton = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+    n_gauss = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20]
+    n_table = [2, 3, 4, 5]
+
+    methods_newton = [
+        (rectangles, "Прямоугольники"),
+        (trapezoid, "Трапеции"),
+        (simpson, "Симпсон"),
+        (three_eighths, "Три восьмых"),
+    ]
+
+    table_methods = [
+        (chebyshev_quadrature, "Чебышев"),
+        (radau_quadrature, "Радо"),
+        (lobatto_quadrature, "Лобатто"),
+    ]
+
+    for task_name, task in test_tasks.items():
+        if task_name == 'x²':
+            continue
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+        # Левый график: Ньютон–Котес
+        ax1 = axes[0]
+        for method, name in methods_newton:
+            errors = []
+            xs = []
+            for n in n_newton:
+                try:
+                    if method == simpson and n % 2 != 0:
+                        continue
+                    if method == three_eighths and n % 3 != 0:
+                        continue
+                    I = method(task['f'], n, task['a'], task['b'])
+                    error = abs(task['exact'] - I)
+                    if error > 1e-16:
+                        errors.append(error)
+                        xs.append(n)
+                except:
+                    continue
+            if errors:
+                ax1.semilogy(xs, errors, 'o-', label=name, linewidth=1.5, markersize=4)
+        ax1.set_xlabel('число отрезков n')
+        ax1.set_ylabel('реальная ошибка (лог. шкала)')
+        ax1.set_title(f'{task_name} — методы Ньютона–Котеса')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+
+        # Правый график: Гаусс, Чебышев, Радо, Лобатто
+        ax2 = axes[1]
+
+        # Гаусс (авто)
+        errors = []
+        xs = []
+        for k in n_gauss:
+            try:
+                I = gauss_quadrature_auto(task['f'], k, task['a'], task['b'])
+                error = abs(task['exact'] - I)
+                if error > 1e-16:
+                    errors.append(error)
+                    xs.append(k)
+            except:
+                continue
+        if errors:
+            ax2.semilogy(xs, errors, 's-', label="Гаусс", linewidth=2, markersize=5)
+
+        # Чебышев, Радо, Лобатто
+        markers = ['d-', '^-', 'v-']
+        for (method, name), marker in zip(table_methods, markers):
+            errors = []
+            xs = []
+            for k in n_table:
+                try:
+                    I = method(task['f'], k, task['a'], task['b'])
+                    error = abs(task['exact'] - I)
+                    if error > 1e-16:
+                        errors.append(error)
+                        xs.append(k)
+                except:
+                    continue
+            if errors:
+                ax2.semilogy(xs, errors, marker, label=name, linewidth=2, markersize=6)
+
+        ax2.set_xlabel('число узлов k')
+        ax2.set_ylabel('реальная ошибка (лог. шкала)')
+        ax2.set_title(f'{task_name} — методы Гауссовского типа')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(f'error_plot_split_{task_name}.png', dpi=150, bbox_inches='tight')
+        plt.show()
 
 methods = [
     (rectangles, 2, "Прямоугольники"),
@@ -267,4 +590,6 @@ methods = [
 ]
 
 analysis()
-plot_error()
+#plot_error()
+plot_error_simple()
+analysis_new()
